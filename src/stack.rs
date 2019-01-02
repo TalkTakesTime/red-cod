@@ -3,27 +3,29 @@ use std::iter::FromIterator;
 
 pub struct ProgramStack {
     base: Stack,
-    children: Vec<Stack>,
+    substacks: Vec<Stack>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum StackError {
     Underflow,
 }
 
 impl ProgramStack {
     fn curr(&mut self) -> &mut Stack {
-        self.children.last_mut().unwrap_or(&mut self.base)
+        self.substacks.last_mut().unwrap_or(&mut self.base)
     }
 
+    // [
     pub fn new_stack(&mut self, n: usize) -> Result<(), StackError> {
         let new_stack = self.curr().split(n)?;
-        self.children.push(new_stack);
+        self.substacks.push(new_stack);
         Ok(())
     }
 
+    // ]
     pub fn drop_stack(&mut self) {
-        if let Some(top) = self.children.pop() {
+        if let Some(top) = self.substacks.pop() {
             self.curr().extend(top);
         } else {
             self.curr().clear();
@@ -200,5 +202,98 @@ impl IntoIterator for Stack {
 impl Extend<f64> for Stack {
     fn extend<I: IntoIterator<Item = f64>>(&mut self, iter: I) {
         self.entries.extend(iter);
+    }
+}
+
+#[cfg(test)]
+mod test {
+    mod stack {
+        use super::super::*;
+
+        macro_rules! stack {
+            ( $( $x:expr ),* ) => {
+                {
+                    let mut temp_stack = Stack::new();
+                    $(
+                        temp_stack.push($x);
+                    )*
+                    temp_stack
+                }
+            };
+        }
+
+        macro_rules! assert_stack_eq {
+            ($s:expr, $v:expr) => {{
+                let stack_vec: Vec<_> = $s.into_iter().collect();
+                assert_eq!(stack_vec, $v);
+            }};
+        }
+
+        #[test]
+        fn test_into_iterator() {
+            let s = stack![1f64, 2f64, 3f64];
+            assert_stack_eq!(s, vec![1f64, 2f64, 3f64]);
+        }
+
+        #[test]
+        fn test_pop_on_nonempty_stack() {
+            let mut s = stack![1f64, 2f64, 3f64];
+            assert_eq!(s.pop(), Ok(3f64));
+        }
+
+        #[test]
+        fn test_pop_on_empty_stack() {
+            let mut s = stack![];
+            assert_eq!(s.pop(), Err(StackError::Underflow));
+        }
+
+        #[test]
+        fn test_add() {
+            let mut s = stack![1f64, 2f64];
+            s.add().unwrap();
+            assert_stack_eq!(s, vec![3f64]);
+        }
+
+        #[test]
+        fn test_subtract() {
+            let mut s = stack![2f64, 1f64];
+            s.subtract().unwrap();
+            assert_stack_eq!(s, vec![1f64]);
+        }
+
+        #[test]
+        fn test_multiply() {
+            let mut s = stack![2f64, 3f64];
+            s.multiply().unwrap();
+            assert_stack_eq!(s, vec![6f64]);
+        }
+
+        #[test]
+        fn test_divide() {
+            let mut s = stack![10f64, 5f64];
+            s.divide().unwrap();
+            assert_stack_eq!(s, vec![2f64]);
+        }
+
+        #[test]
+        fn test_modulo() {
+            let mut s = stack![10f64, 3f64];
+            s.modulo().unwrap();
+            assert_stack_eq!(s, vec![1f64]);
+        }
+
+        #[test]
+        fn test_equal_with_equal_vals() {
+            let mut s = stack![2f64, 2f64];
+            s.equals().unwrap();
+            assert_stack_eq!(s, vec![1f64]);
+        }
+
+        #[test]
+        fn test_equal_with_inequal_vals() {
+            let mut s = stack![2f64, 3f64];
+            s.equals().unwrap();
+            assert_stack_eq!(s, vec![0f64]);
+        }
     }
 }
