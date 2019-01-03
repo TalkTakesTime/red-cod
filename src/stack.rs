@@ -17,8 +17,8 @@ impl ProgramStack {
     }
 
     // [
-    pub fn new_stack(&mut self, n: usize) -> Result<(), StackError> {
-        let new_stack = self.curr().split(n)?;
+    pub fn split_stack(&mut self) -> Result<(), StackError> {
+        let new_stack = self.curr().split()?;
         self.substacks.push(new_stack);
         Ok(())
     }
@@ -59,7 +59,8 @@ impl Stack {
         self.entries.clear();
     }
 
-    pub fn split(&mut self, n: usize) -> Result<Self, StackError> {
+    pub fn split(&mut self) -> Result<Self, StackError> {
+        let n = self.pop()? as usize;
         let self_len = self.entries.len();
         if self_len < n {
             Err(StackError::Underflow)
@@ -113,7 +114,11 @@ impl Stack {
     pub fn equals(&mut self) -> Result<(), StackError> {
         let x = self.pop()?;
         let y = self.pop()?;
-        self.push(if y == x { 1f64 } else { 0f64 });
+        self.push(if (y - x).abs() < std::f64::EPSILON {
+            1f64
+        } else {
+            0f64
+        });
         Ok(())
     }
 
@@ -178,6 +183,16 @@ impl Stack {
     // l
     pub fn push_len(&mut self) {
         self.entries.push_back(self.entries.len() as f64);
+    }
+
+    // &
+    pub fn swap_register(&mut self) -> Result<(), StackError> {
+        if let Some(val) = self.register {
+            self.push(val);
+        } else {
+            self.register = Some(self.pop()?);
+        }
+        Ok(())
     }
 }
 
