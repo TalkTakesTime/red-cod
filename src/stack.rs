@@ -228,6 +228,7 @@ mod test {
         macro_rules! stack {
             ( $( $x:expr ),* ) => {
                 {
+                    #[allow(unused_mut)]
                     let mut temp_stack = Stack::new();
                     $(
                         temp_stack.push($x);
@@ -244,71 +245,135 @@ mod test {
             }};
         }
 
+        macro_rules! verify_result {
+            ($stack:ident, $actual:ident, {
+                result: $expected:expr,
+                stack: [$($res_vals:expr),*]
+            }) => {
+                assert_eq!($actual, $expected);
+                assert_stack_eq!($stack, vec![$($res_vals),*]);
+            };
+            ($stack:ident, $actual:ident, $expected:expr) => {
+                verify_result!($stack, $actual, { result: $expected, stack: [] });
+            };
+        }
+
+        macro_rules! test_stack_method {
+            (method: $method:ident, cases: {
+                $(
+                    $name:ident: [$($init_vals:expr),*] => $result:tt,
+                )*
+            }) => {
+                mod $method {
+                    use super::*;
+                    $(
+                        #[test]
+                        fn $name() {
+                            let mut test_stack = stack![$($init_vals),*];
+                            let op_result = test_stack.$method();
+                            verify_result!(test_stack, op_result, $result);
+                        }
+                    )*
+                }
+            };
+        }
+
         #[test]
         fn test_into_iterator() {
             let s = stack![1f64, 2f64, 3f64];
             assert_stack_eq!(s, vec![1f64, 2f64, 3f64]);
         }
 
-        #[test]
-        fn test_pop_on_nonempty_stack() {
-            let mut s = stack![1f64, 2f64, 3f64];
-            assert_eq!(s.pop(), Ok(3f64));
+        test_stack_method! {
+            method: pop,
+            cases: {
+                empty_stack: [] => (Err(StackError::Underflow)), // why does this need parentheses?
+                single_value: [1f64] => (Ok(1f64)),
+                multiple_values: [3f64, 2f64] => {
+                    result: Ok(2f64),
+                    stack: [3f64]
+                },
+            }
         }
 
-        #[test]
-        fn test_pop_on_empty_stack() {
-            let mut s = stack![];
-            assert_eq!(s.pop(), Err(StackError::Underflow));
+        test_stack_method! {
+            method: add,
+            cases: {
+                empty_stack: [] => (Err(StackError::Underflow)), // why does this need parentheses?
+                single_value: [1f64] => (Err(StackError::Underflow)),
+                multiple_values: [1f64, 2f64] => {
+                    result: Ok(()),
+                    stack: [3f64]
+                },
+            }
         }
 
-        #[test]
-        fn test_add() {
-            let mut s = stack![1f64, 2f64];
-            s.add().unwrap();
-            assert_stack_eq!(s, vec![3f64]);
+        test_stack_method! {
+            method: subtract,
+            cases: {
+                empty_stack: [] => (Err(StackError::Underflow)), // why does this need parentheses?
+                single_value: [1f64] => (Err(StackError::Underflow)),
+                multiple_values: [3f64, 1f64] => {
+                    result: Ok(()),
+                    stack: [2f64]
+                },
+            }
         }
 
-        #[test]
-        fn test_subtract() {
-            let mut s = stack![2f64, 1f64];
-            s.subtract().unwrap();
-            assert_stack_eq!(s, vec![1f64]);
+        test_stack_method! {
+            method: multiply,
+            cases: {
+                empty_stack: [] => (Err(StackError::Underflow)), // why does this need parentheses?
+                single_value: [1f64] => (Err(StackError::Underflow)),
+                multiple_values: [3f64, 2f64] => {
+                    result: Ok(()),
+                    stack: [6f64]
+                },
+            }
         }
 
-        #[test]
-        fn test_multiply() {
-            let mut s = stack![2f64, 3f64];
-            s.multiply().unwrap();
-            assert_stack_eq!(s, vec![6f64]);
+        test_stack_method! {
+            method: divide,
+            cases: {
+                empty_stack: [] => (Err(StackError::Underflow)), // why does this need parentheses?
+                single_value: [1f64] => (Err(StackError::Underflow)),
+                multiple_values: [10f64, 5f64] => {
+                    result: Ok(()),
+                    stack: [2f64]
+                },
+                fractional_result: [5f64, 10f64] => {
+                    result: Ok(()),
+                    stack: [0.5f64]
+                },
+            }
         }
 
-        #[test]
-        fn test_divide() {
-            let mut s = stack![10f64, 5f64];
-            s.divide().unwrap();
-            assert_stack_eq!(s, vec![2f64]);
+        test_stack_method! {
+            method: modulo,
+            cases: {
+                empty_stack: [] => (Err(StackError::Underflow)), // why does this need parentheses?
+                single_value: [1f64] => (Err(StackError::Underflow)),
+                multiple_values: [10f64, 3f64] => {
+                    result: Ok(()),
+                    stack: [1f64]
+                },
+            }
         }
 
-        #[test]
-        fn test_modulo() {
-            let mut s = stack![10f64, 3f64];
-            s.modulo().unwrap();
-            assert_stack_eq!(s, vec![1f64]);
-        }
-
-        #[test]
-        fn test_equal_with_equal_vals() {
-            let mut s = stack![2f64, 2f64];
-            s.equals().unwrap();
-            assert_stack_eq!(s, vec![1f64]);
-        }
-
-        #[test]
-        fn test_equal_with_inequal_vals() {
-            let mut s = stack![2f64, 3f64];
-            s.equals().unwrap();
-            assert_stack_eq!(s, vec![0f64]);
+        test_stack_method! {
+            method: equals,
+            cases: {
+                empty_stack: [] => (Err(StackError::Underflow)), // why does this need parentheses?
+                single_value: [1f64] => (Err(StackError::Underflow)),
+                inequal_values: [10f64, 3f64] => {
+                    result: Ok(()),
+                    stack: [0f64]
+                },
+                equal_values: [10f64, 10f64] => {
+                    result: Ok(()),
+                    stack: [1f64]
+                },
+            }
         }
     }
 }
