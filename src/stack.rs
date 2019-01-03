@@ -281,7 +281,8 @@ mod test {
         #[test]
         fn test_into_iterator() {
             let s = stack![1f64, 2f64, 3f64];
-            assert_stack_eq!(s, vec![1f64, 2f64, 3f64]);
+            let stack_vec: Vec<_> = s.into_iter().collect();
+            assert_eq!(stack_vec, vec![1f64, 2f64, 3f64]);
         }
 
         test_stack_method! {
