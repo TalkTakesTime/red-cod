@@ -152,8 +152,8 @@ impl Stack {
             return Err(StackError::Underflow);
         }
 
-        for i in (len - 1)..(len - n) {
-            self.entries.swap(i, i - 1);
+        for i in 1..n {
+            self.entries.swap(len - i, len - i - 1);
         }
         Ok(())
     }
@@ -258,22 +258,39 @@ mod test {
             };
         }
 
+        macro_rules! call_method {
+            ($var:ident, $method:ident, ()) => {
+                $var.$method()
+            };
+            ($var:ident, $method:ident, ($($arg:expr),*)) => {
+                $var.$method($($arg),*)
+            };
+        }
+
         macro_rules! test_stack_method {
-            (method: $method:ident, cases: {
+            (name: $test_name:ident, method: $method:ident, args: $args:tt, cases: {
                 $(
-                    $name:ident: [$($init_vals:expr),*] => $result:tt,
+                    $case_name:ident: [$($init_vals:expr),*] => $result:tt,
                 )*
             }) => {
-                mod $method {
+                mod $test_name {
                     use super::*;
                     $(
                         #[test]
-                        fn $name() {
+                        fn $case_name() {
                             let mut test_stack = stack![$($init_vals),*];
-                            let op_result = test_stack.$method();
+                            let op_result = call_method!(test_stack, $method, $args);
                             verify_result!(test_stack, op_result, $result);
                         }
                     )*
+                }
+            };
+            (method: $method:ident, cases: $cases:tt) => {
+                test_stack_method! {
+                    name: $method,
+                    method: $method,
+                    args: (),
+                    cases: $cases
                 }
             };
         }
@@ -373,6 +390,174 @@ mod test {
                 equal_values: [10f64, 10f64] => {
                     result: Ok(()),
                     stack: [1f64]
+                },
+            }
+        }
+
+        test_stack_method! {
+            method: greater_than,
+            cases: {
+                empty_stack: [] => (Err(StackError::Underflow)),
+                single_value: [1f64] => (Err(StackError::Underflow)),
+                lesser_value: [1f64, 3f64] => {
+                    result: Ok(()),
+                    stack: [0f64]
+                },
+                equal_value: [3f64, 3f64] => {
+                    result: Ok(()),
+                    stack: [0f64]
+                },
+                greater_value: [10f64, 3f64] => {
+                    result: Ok(()),
+                    stack: [1f64]
+                },
+            }
+        }
+
+        test_stack_method! {
+            method: less_than,
+            cases: {
+                empty_stack: [] => (Err(StackError::Underflow)),
+                single_value: [1f64] => (Err(StackError::Underflow)),
+                greater_value: [10f64, 3f64] => {
+                    result: Ok(()),
+                    stack: [0f64]
+                },
+                equal_value: [3f64, 3f64] => {
+                    result: Ok(()),
+                    stack: [0f64]
+                },
+                lesser_value: [1f64, 3f64] => {
+                    result: Ok(()),
+                    stack: [1f64]
+                },
+            }
+        }
+
+        test_stack_method! {
+            method: dup,
+            cases: {
+                empty_stack: [] => (Err(StackError::Underflow)),
+                single_value: [1f64] => {
+                    result: Ok(()),
+                    stack: [1f64, 1f64]
+                },
+            }
+        }
+
+        test_stack_method! {
+            name: swap2,
+            method: swap,
+            args: (2),
+            cases: {
+                empty_stack: [] => (Err(StackError::Underflow)),
+                single_value: [1f64] => {
+                    result: Err(StackError::Underflow),
+                    stack: [1f64]
+                },
+                two_values: [1f64, 2f64] => {
+                    result: Ok(()),
+                    stack: [2f64, 1f64]
+                },
+                many_values: [1f64, 2f64, 3f64, 4f64] => {
+                    result: Ok(()),
+                    stack: [1f64, 2f64, 4f64, 3f64]
+                },
+            }
+        }
+
+        test_stack_method! {
+            name: swap3,
+            method: swap,
+            args: (3),
+            cases: {
+                empty_stack: [] => (Err(StackError::Underflow)),
+                single_value: [1f64] => {
+                    result: Err(StackError::Underflow),
+                    stack: [1f64]
+                },
+                two_values: [1f64, 2f64] => {
+                    result: Err(StackError::Underflow),
+                    stack: [1f64, 2f64]
+                },
+                many_values: [1f64, 2f64, 3f64, 4f64] => {
+                    result: Ok(()),
+                    stack: [1f64, 4f64, 2f64, 3f64]
+                },
+            }
+        }
+
+        test_stack_method! {
+            method: shift_right,
+            cases: {
+                empty_stack: [] => (),
+                single_value: [1f64] => {
+                    result: (),
+                    stack: [1f64]
+                },
+                two_values: [1f64, 2f64] => {
+                    result: (),
+                    stack: [2f64, 1f64]
+                },
+                many_values: [1f64, 2f64, 3f64, 4f64] => {
+                    result: (),
+                    stack: [4f64, 1f64, 2f64, 3f64]
+                },
+            }
+        }
+
+        test_stack_method! {
+            method: shift_left,
+            cases: {
+                empty_stack: [] => (),
+                single_value: [1f64] => {
+                    result: (),
+                    stack: [1f64]
+                },
+                two_values: [1f64, 2f64] => {
+                    result: (),
+                    stack: [2f64, 1f64]
+                },
+                many_values: [1f64, 2f64, 3f64, 4f64] => {
+                    result: (),
+                    stack: [2f64, 3f64, 4f64, 1f64]
+                },
+            }
+        }
+
+        test_stack_method! {
+            method: reverse,
+            cases: {
+                empty_stack: [] => (),
+                single_value: [1f64] => {
+                    result: (),
+                    stack: [1f64]
+                },
+                two_values: [1f64, 2f64] => {
+                    result: (),
+                    stack: [2f64, 1f64]
+                },
+                many_values: [1f64, 2f64, 3f64, 4f64] => {
+                    result: (),
+                    stack: [4f64, 3f64, 2f64, 1f64]
+                },
+            }
+        }
+
+        test_stack_method! {
+            method: push_len,
+            cases: {
+                empty_stack: [] => {
+                    result: (),
+                    stack: [0f64]
+                },
+                single_value: [1f64] => {
+                    result: (),
+                    stack: [1f64, 1f64]
+                },
+                many_values: [1f64, 2f64, 3f64, 2f64] => {
+                    result: (),
+                    stack: [1f64, 2f64, 3f64, 2f64, 4f64]
                 },
             }
         }
