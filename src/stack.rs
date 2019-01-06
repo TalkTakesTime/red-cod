@@ -1,6 +1,9 @@
 use std::collections::VecDeque;
+use std::error::Error;
+use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::iter::FromIterator;
 
+#[derive(Debug)]
 pub struct ProgramStack {
     base: Stack,
     substacks: Vec<Stack>,
@@ -9,16 +12,24 @@ pub struct ProgramStack {
 #[derive(Debug, PartialEq)]
 pub enum StackError {
     Underflow,
+    DivideByZero, // does this belong here?
 }
 
 impl ProgramStack {
-    fn curr(&mut self) -> &mut Stack {
+    pub fn new() -> Self {
+        Self {
+            base: Stack::new(),
+            substacks: vec![],
+        }
+    }
+
+    pub fn top(&mut self) -> &mut Stack {
         self.substacks.last_mut().unwrap_or(&mut self.base)
     }
 
     // [
     pub fn split_stack(&mut self) -> Result<(), StackError> {
-        let new_stack = self.curr().split()?;
+        let new_stack = self.top().split()?;
         self.substacks.push(new_stack);
         Ok(())
     }
@@ -26,13 +37,14 @@ impl ProgramStack {
     // ]
     pub fn drop_stack(&mut self) {
         if let Some(top) = self.substacks.pop() {
-            self.curr().extend(top);
+            self.top().extend(top);
         } else {
-            self.curr().clear();
+            self.top().clear();
         }
     }
 }
 
+#[derive(Debug)]
 pub struct Stack {
     entries: VecDeque<f64>,
     register: Option<f64>,
@@ -97,6 +109,9 @@ impl Stack {
     // ,
     pub fn divide(&mut self) -> Result<(), StackError> {
         let x = self.pop()?;
+        if x == 0f64 {
+            return Err(StackError::DivideByZero);
+        }
         let y = self.pop()?;
         self.push(y / x);
         Ok(())
@@ -220,6 +235,18 @@ impl Extend<f64> for Stack {
     }
 }
 
+impl Display for StackError {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl Error for StackError {
+    fn description(&self) -> &str {
+        ""
+    }
+}
+
 #[cfg(test)]
 mod test {
     mod stack {
@@ -268,11 +295,16 @@ mod test {
         }
 
         macro_rules! test_stack_method {
-            (name: $test_name:ident, method: $method:ident, args: $args:tt, cases: {
-                $(
-                    $case_name:ident: [$($init_vals:expr),*] => $result:tt,
-                )*
-            }) => {
+            (
+                name: $test_name:ident,
+                method: $method:ident,
+                args: $args:tt,
+                cases: {
+                    $(
+                        $case_name:ident: [$($init_vals:expr),*] => $result:tt,
+                    )*
+                }
+            ) => {
                 mod $test_name {
                     use super::*;
                     $(
