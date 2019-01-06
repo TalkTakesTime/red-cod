@@ -283,19 +283,29 @@ mod test {
             "\"hello, world\"rv
           o;!?l<",
         );
-        interpreter.run_to_end().unwrap();
+
+        let res = interpreter.run_to_end();
+        if res.is_err() {
+            println!();
+            println!("{:#?}", interpreter);
+        }
         println!();
     }
 
     #[test]
     fn test_fizzbuzz() {
         let mut interpreter = Interpreter::new(
-            "0voa                            ~/?=0:\
+            "0voa                            ~/?=0:\\
  voa            oooo'Buzz'~<     /
  >1+:aa*1+=?;::5%:{3%:@*?\\?/'zziF'oooo/
  ^oa                 n:~~/",
         );
-        interpreter.run_to_end().unwrap();
+
+        let res = interpreter.run_to_end();
+        if res.is_err() {
+            println!();
+            println!("{:#?}", interpreter);
+        }
         println!();
     }
 }
