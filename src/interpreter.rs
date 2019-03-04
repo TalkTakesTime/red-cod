@@ -169,10 +169,10 @@ impl Interpreter {
             ';' => self.state = State::Done,
 
             // explicitly unimplemented
-            'p' | 'g' => return Err(Box::new(RuntimeError::UnimplementedInstruction(instr))),
+            'p' | 'g' => Err(RuntimeError::UnimplementedInstruction(instr))?,
 
             // yet to be implemented
-            'x' | '.' => return Err(Box::new(RuntimeError::UnimplementedInstruction(instr))),
+            'x' | '.' => Err(RuntimeError::UnimplementedInstruction(instr))?,
 
             // everything else
             _ => Err(RuntimeError::InvalidInstruction(instr))?,
