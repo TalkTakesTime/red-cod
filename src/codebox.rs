@@ -52,7 +52,7 @@ impl Codebox {
         }
     }
 
-    pub fn instruction_at(&self, pos: &Pos) -> Instruction {
+    pub fn get_instruction(&self, pos: &Pos) -> Instruction {
         *self.code.get(pos).unwrap_or(&Instruction::Noop)
     }
 

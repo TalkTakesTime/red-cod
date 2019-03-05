@@ -1,8 +1,10 @@
 use crate::codebox::{Codebox, Instruction, Pos};
 use crate::stack::ProgramStack;
 
-use rand::distributions::{Distribution, Standard};
-use rand::prelude::*;
+use rand::{
+    distributions::{Distribution, Standard},
+    Rng,
+};
 use std::error::Error;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 
@@ -72,7 +74,7 @@ impl Interpreter {
     }
 
     fn step(&mut self) -> Result<(), Box<Error>> {
-        let instr = self.codebox.instruction_at(&self.ptr);
+        let instr = self.codebox.get_instruction(&self.ptr);
         if let Instruction::Op(instr) = instr {
             self.execute_instruction(instr)?;
         } else if let ParseMode::Text(_) = self.mode {
@@ -173,17 +175,17 @@ impl Interpreter {
             // codebox manipulation
             'g' => {
                 let pos = self.load_pos()?;
-                if let Instruction::Op(xy_instr) = self.codebox.instruction_at(&pos) {
+                if let Instruction::Op(xy_instr) = self.codebox.get_instruction(&pos) {
                     self.push_char(xy_instr);
                 } else {
                     self.stack.top().push(0f64);
                 }
-            },
+            }
             'p' => {
                 let pos = self.load_pos()?;
                 let instr = f64_to_char(self.stack.top().pop()?)?;
                 self.codebox.set_instruction(pos, instr);
-            },
+            }
 
             // end
             ';' => self.state = State::Done,
@@ -202,7 +204,7 @@ impl Interpreter {
 
         // in text mode, noops can't be skipped
         if self.mode == ParseMode::Normal {
-            while self.codebox.instruction_at(&self.ptr) == Instruction::Noop {
+            while self.codebox.get_instruction(&self.ptr) == Instruction::Noop {
                 self.ptr = self.get_next_pos();
             }
         }
@@ -356,9 +358,7 @@ mod test {
 
     #[test]
     fn test_quine() {
-        let mut interpreter = Interpreter::new(
-            "\"r00gol?!;40.",
-        );
+        let mut interpreter = Interpreter::new("\"r00gol?!;40.");
 
         let res = interpreter.run_to_end();
         if res.is_err() {
