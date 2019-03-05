@@ -1,4 +1,6 @@
-#[derive(Debug, Hash, PartialEq)]
+use std::collections::HashMap;
+
+#[derive(Debug, Hash, PartialEq, Eq, Copy, Clone)]
 pub struct Pos {
     pub x: usize,
     pub y: usize,
@@ -12,7 +14,7 @@ pub enum Instruction {
 
 #[derive(Debug)]
 pub struct Codebox {
-    code: Vec<Instruction>,
+    code: HashMap<Pos, Instruction>,
     width: usize,
     height: usize,
 }
@@ -26,17 +28,20 @@ impl Codebox {
             .unwrap_or(&String::new())
             .len();
         let height = lines.len();
-        let mut code = vec![Instruction::Noop; width * lines.len()];
+        let mut code = HashMap::new();
 
         for (y, line) in lines.into_iter().enumerate() {
             for (x, chr) in line.chars().enumerate() {
-                code[y * width + x] = if chr == ' ' {
-                    Instruction::Noop
-                } else {
-                    // technically, some of these ops might be invalid
-                    // we'll handle that during interpretation
-                    Instruction::Op(chr)
-                };
+                code.insert(
+                    Pos { x, y },
+                    if chr == ' ' {
+                        Instruction::Noop
+                    } else {
+                        // technically, some of these ops might be invalid
+                        // we'll handle that during interpretation
+                        Instruction::Op(chr)
+                    },
+                );
             }
         }
 
@@ -48,12 +53,11 @@ impl Codebox {
     }
 
     pub fn instruction_at(&self, pos: &Pos) -> Instruction {
-        let pos = pos.y * self.width + pos.x;
-        if pos >= self.code.len() {
-            Instruction::Noop
-        } else {
-            self.code[pos]
-        }
+        *self.code.get(pos).unwrap_or(&Instruction::Noop)
+    }
+
+    pub fn set_instruction(&mut self, pos: Pos, instr: char) {
+        self.code.insert(pos, Instruction::Op(instr));
     }
 
     pub fn width(&self) -> usize {

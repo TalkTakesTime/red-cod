@@ -1,6 +1,8 @@
 use crate::codebox::{Codebox, Instruction, Pos};
 use crate::stack::ProgramStack;
 
+use rand::distributions::{Distribution, Standard};
+use rand::prelude::*;
 use std::error::Error;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 
@@ -28,6 +30,7 @@ enum ParseMode {
 enum RuntimeError {
     InvalidInstruction(char),
     UnimplementedInstruction(char),
+    InvalidPosition(f64, f64),
     CharConversionFailure,
 }
 
@@ -159,20 +162,34 @@ impl Interpreter {
                 }
             }
             '#' => self.dir = self.dir.reverse(),
+            'x' => self.dir = rand::random(),
+            '.' => self.ptr = self.load_pos()?,
 
             // input/output
             '"' | '\'' => self.switch_parse_mode(instr),
             'n' => print!("{}", self.stack.top().pop()?),
             'o' => print_char(self.stack.top().pop()?)?,
 
+            // codebox manipulation
+            'g' => {
+                let pos = self.load_pos()?;
+                if let Instruction::Op(xy_instr) = self.codebox.instruction_at(&pos) {
+                    self.push_char(xy_instr);
+                } else {
+                    self.stack.top().push(0f64);
+                }
+            },
+            'p' => {
+                let pos = self.load_pos()?;
+                let instr = f64_to_char(self.stack.top().pop()?)?;
+                self.codebox.set_instruction(pos, instr);
+            },
+
             // end
             ';' => self.state = State::Done,
 
-            // explicitly unimplemented
-            'p' | 'g' => Err(RuntimeError::UnimplementedInstruction(instr))?,
-
             // yet to be implemented
-            'x' | '.' => Err(RuntimeError::UnimplementedInstruction(instr))?,
+            // ... none?
 
             // everything else
             _ => Err(RuntimeError::InvalidInstruction(instr))?,
@@ -228,6 +245,19 @@ impl Interpreter {
             ParseMode::Normal
         }
     }
+
+    fn load_pos(&mut self) -> Result<Pos, Box<Error>> {
+        let y = self.stack.top().pop()?;
+        let x = self.stack.top().pop()?;
+        if x < 0f64 || y < 0f64 || x != x.trunc() || y != y.trunc() {
+            Err(RuntimeError::InvalidPosition(x, y))?
+        } else {
+            Ok(Pos {
+                x: x as usize,
+                y: y as usize,
+            })
+        }
+    }
 }
 
 fn get_wrapped_coord(coord: usize, incr: isize, max: usize) -> usize {
@@ -242,12 +272,16 @@ fn get_wrapped_coord(coord: usize, incr: isize, max: usize) -> usize {
 }
 
 fn print_char(chr: f64) -> Result<(), RuntimeError> {
+    let chr = f64_to_char(chr)?;
+    print!("{}", chr as char);
+    Ok(())
+}
+
+fn f64_to_char(chr: f64) -> Result<char, RuntimeError> {
     if chr < u32::min_value() as f64 || chr > u32::max_value() as f64 || chr != chr.trunc() {
         return Err(RuntimeError::CharConversionFailure);
     }
-    let chr = std::char::from_u32(chr as u32).ok_or(RuntimeError::CharConversionFailure)?;
-    print!("{}", chr as char);
-    Ok(())
+    std::char::from_u32(chr as u32).ok_or(RuntimeError::CharConversionFailure)
 }
 
 impl Direction {
@@ -257,6 +291,17 @@ impl Direction {
             Direction::East => Direction::West,
             Direction::South => Direction::North,
             Direction::West => Direction::East,
+        }
+    }
+}
+
+impl Distribution<Direction> for Standard {
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Direction {
+        match rng.gen_range(0, 4) {
+            0 => Direction::North,
+            1 => Direction::East,
+            2 => Direction::South,
+            _ => Direction::West,
         }
     }
 }
@@ -299,6 +344,20 @@ mod test {
  voa            oooo'Buzz'~<     /
  >1+:aa*1+=?;::5%:{3%:@*?\\?/'zziF'oooo/
  ^oa                 n:~~/",
+        );
+
+        let res = interpreter.run_to_end();
+        if res.is_err() {
+            println!();
+            println!("{:#?}", interpreter);
+        }
+        println!();
+    }
+
+    #[test]
+    fn test_quine() {
+        let mut interpreter = Interpreter::new(
+            "\"r00gol?!;40.",
         );
 
         let res = interpreter.run_to_end();
