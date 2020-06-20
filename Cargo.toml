@@ -1,8 +1,9 @@
 [package]
 name = "red-cod"
 version = "0.1.0"
-authors = ["TalkTakesTime <ben.frengley@gmail.com>"]
+authors = ["TalkTakesTime <b3nf@hotmail.com>"]
 edition = "2018"
 
 [dependencies]
-rand = "0.6.5"
+rand = "0.7.3"
+termios = "0.3.2"

@@ -1,5 +1,5 @@
 use crate::codebox::{Codebox, Instruction, Pos};
-use crate::stack::ProgramStack;
+use crate::stack::{ProgramStack, StackError};
 
 use rand::{
     distributions::{Distribution, Standard},
@@ -7,6 +7,7 @@ use rand::{
 };
 use std::error::Error;
 use std::fmt::{Display, Formatter, Result as FmtResult};
+use std::io::{stdout, Write};
 
 #[derive(Debug, PartialEq)]
 enum Direction {
@@ -29,32 +30,40 @@ enum ParseMode {
 }
 
 #[derive(Debug)]
-enum RuntimeError {
+pub enum RuntimeError {
     InvalidInstruction(char),
     UnimplementedInstruction(char),
     InvalidPosition(f64, f64),
     CharConversionFailure,
+    StackError(StackError),
+    UnexpectedEOF,
 }
-
-#[derive(Debug)]
-pub struct Interpreter {
+pub struct Interpreter<T: Iterator<Item = char>> {
     codebox: Codebox,
     stack: ProgramStack,
     ptr: Pos,
     dir: Direction,
     state: State,
     mode: ParseMode,
+
+    input_stream: T,
+    output: Box<dyn Fn(String)>,
 }
 
-impl Interpreter {
-    pub fn new(code: &str) -> Self {
+impl<T: Iterator<Item = char>> Interpreter<T> {
+    pub fn new(code: &str, input_stream: T) -> Self {
         Self {
             codebox: Codebox::new(code),
             stack: ProgramStack::new(),
+            input_stream,
             ptr: Pos { x: 0, y: 0 },
             dir: Direction::East,
             state: State::Running,
             mode: ParseMode::Normal,
+            output: Box::new(|s| {
+                print!("{}", s);
+                stdout().flush().expect("Failed to flush stdout");
+            }),
         }
     }
 
@@ -66,14 +75,14 @@ impl Interpreter {
         }
     }
 
-    fn run_to_end(&mut self) -> Result<(), Box<Error>> {
+    pub fn run_to_end(&mut self) -> Result<(), RuntimeError> {
         while self.state != State::Done {
             self.step()?;
         }
         Ok(())
     }
 
-    fn step(&mut self) -> Result<(), Box<Error>> {
+    fn step(&mut self) -> Result<(), RuntimeError> {
         let instr = self.codebox.get_instruction(&self.ptr);
         if let Instruction::Op(instr) = instr {
             self.execute_instruction(instr)?;
@@ -84,7 +93,7 @@ impl Interpreter {
         Ok(())
     }
 
-    fn execute_instruction(&mut self, instr: char) -> Result<(), Box<Error>> {
+    fn execute_instruction(&mut self, instr: char) -> Result<(), RuntimeError> {
         if let ParseMode::Text(quote_type) = self.mode {
             if instr != quote_type {
                 self.push_char(instr);
@@ -94,7 +103,7 @@ impl Interpreter {
 
         match instr {
             // literals
-            '0'...'9' | 'a'...'f' => self.push_num(instr),
+            '0'..='9' | 'a'..='f' => self.push_num(instr),
 
             // maths
             '+' => self.stack.top().add()?,
@@ -121,6 +130,7 @@ impl Interpreter {
             ']' => self.stack.drop_stack(),
             'l' => self.stack.top().push_len(),
             'r' => self.stack.top().reverse(),
+            '&' => self.stack.top().swap_register()?,
 
             // trampolines
             '!' => self.move_to_next(),
@@ -169,8 +179,15 @@ impl Interpreter {
 
             // input/output
             '"' | '\'' => self.switch_parse_mode(instr),
-            'n' => print!("{}", self.stack.top().pop()?),
-            'o' => print_char(self.stack.top().pop()?)?,
+            'n' => (*self.output)(format!("{}", self.stack.top().pop()?)),
+            'o' => {
+                let ch = self.stack.top().pop()?;
+                self.print_char(ch)?;
+            }
+            'i' => match self.input_stream.next() {
+                None => self.stack.top().push(-1f64),
+                Some(chr) => self.push_char(chr),
+            },
 
             // codebox manipulation
             'g' => {
@@ -248,7 +265,7 @@ impl Interpreter {
         }
     }
 
-    fn load_pos(&mut self) -> Result<Pos, Box<Error>> {
+    fn load_pos(&mut self) -> Result<Pos, RuntimeError> {
         let y = self.stack.top().pop()?;
         let x = self.stack.top().pop()?;
         if x < 0f64 || y < 0f64 || x != x.trunc() || y != y.trunc() {
@@ -259,6 +276,12 @@ impl Interpreter {
                 y: y as usize,
             })
         }
+    }
+
+    fn print_char(&self, chr: f64) -> Result<(), RuntimeError> {
+        let chr = f64_to_char(chr)?;
+        (*self.output)(format!("{}", chr as char));
+        Ok(())
     }
 }
 
@@ -271,12 +294,6 @@ fn get_wrapped_coord(coord: usize, incr: isize, max: usize) -> usize {
     } else {
         (coord + incr) as usize
     }
-}
-
-fn print_char(chr: f64) -> Result<(), RuntimeError> {
-    let chr = f64_to_char(chr)?;
-    print!("{}", chr as char);
-    Ok(())
 }
 
 fn f64_to_char(chr: f64) -> Result<char, RuntimeError> {
@@ -308,6 +325,19 @@ impl Distribution<Direction> for Standard {
     }
 }
 
+impl<T: Iterator<Item = char>> std::fmt::Debug for Interpreter<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        f.debug_struct("Interpreter")
+            .field("codebox", &self.codebox)
+            .field("stack", &self.stack)
+            .field("ptr", &self.ptr)
+            .field("dir", &self.dir)
+            .field("state", &self.state)
+            .field("mode", &self.mode)
+            .finish()
+    }
+}
+
 impl Display for RuntimeError {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
         write!(f, "{:?}", self)
@@ -316,19 +346,27 @@ impl Display for RuntimeError {
 
 impl Error for RuntimeError {
     fn description(&self) -> &str {
-        "" // hm
+        "" // TODO
+    }
+}
+
+impl From<StackError> for RuntimeError {
+    fn from(error: StackError) -> Self {
+        RuntimeError::StackError(error)
     }
 }
 
 #[cfg(test)]
 mod test {
     use super::Interpreter;
+    use std::iter::empty;
 
     #[test]
     fn test_helloworld() {
         let mut interpreter = Interpreter::new(
             "\"hello, world\"rv
           o;!?l<",
+            empty(),
         );
 
         let res = interpreter.run_to_end();
@@ -346,6 +384,7 @@ mod test {
  voa            oooo'Buzz'~<     /
  >1+:aa*1+=?;::5%:{3%:@*?\\?/'zziF'oooo/
  ^oa                 n:~~/",
+            empty(),
         );
 
         let res = interpreter.run_to_end();
@@ -358,7 +397,27 @@ mod test {
 
     #[test]
     fn test_quine() {
-        let mut interpreter = Interpreter::new("\"r00gol?!;40.");
+        let mut interpreter = Interpreter::new("\"r00gol?!;40.", empty());
+
+        let res = interpreter.run_to_end();
+        if res.is_err() {
+            println!();
+            println!("{:#?}", interpreter);
+        }
+        println!();
+    }
+
+    #[test]
+    fn test_quine2() {
+        let mut interpreter = Interpreter::new(
+            "0>:a$f8+$p1+:5-?vv     
+ ^              <>~0v  
+v             <     <  
+>0v          ;^?-6:+1~<
+v <                  < 
+>$:{:}$go$   1+:f9+-?^^",
+            empty(),
+        );
 
         let res = interpreter.run_to_end();
         if res.is_err() {

@@ -1,6 +1,10 @@
+#![feature(backtrace)]
+
 mod codebox;
 mod interpreter;
 mod stack;
+
+pub use interpreter::Interpreter;
 
 #[cfg(test)]
 mod tests {

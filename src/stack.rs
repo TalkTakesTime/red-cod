@@ -155,8 +155,8 @@ impl Stack {
 
     // :
     pub fn dup(&mut self) -> Result<(), StackError> {
-        let val = self.entries.back().ok_or(StackError::Underflow)?;
-        self.push(*val);
+        let val = *self.entries.back().ok_or(StackError::Underflow)?;
+        self.push(val);
         Ok(())
     }
 
